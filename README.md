@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kiplo
 
-## Getting Started
+A simple MVP app for managing teams, team members, and 1:1 agenda items.
 
-First, run the development server:
+## Features
+
+- Create and manage teams
+- Add team members to teams
+- Create agenda items for each team member
+- Toggle agenda items as completed during 1:1s
+- Clean, modern UI built with Next.js and Tailwind CSS
+
+## Tech Stack
+
+- **Next.js 14** (App Router) - React framework
+- **TypeScript** - Type safety
+- **Supabase** - PostgreSQL database
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - UI components
+
+## Setup Instructions
+
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Set Up Supabase
+
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to the SQL Editor in your Supabase dashboard
+3. Run the migration file: `supabase/migrations/001_initial_schema.sql`
+4. Copy your project URL and anon key from Settings > API
+
+### 3. Configure Environment Variables
+
+Create a `.env.local` file in the root directory:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 4. Run the Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database Schema
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The app uses three main tables:
 
-## Learn More
+- **teams** - Stores team information
+- **team_members** - Stores team members (linked to teams)
+- **agenda_items** - Stores agenda items (linked to team members)
 
-To learn more about Next.js, take a look at the following resources:
+## Usage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Create a Team**: On the home page, enter a team name and click "Create Team"
+2. **View Team**: Click on a team card to view its details
+3. **Add Members**: On the team page, enter a member name and click "Add Member"
+4. **Add Agenda Items**: Click "+ Add Item" next to a member's name
+5. **Complete Items**: Check the checkbox next to an agenda item to mark it as completed
+6. **Delete Items**: Click the × button to delete an agenda item
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+management-app/
+├── app/                    # Next.js App Router
+│   ├── layout.tsx         # Root layout
+│   ├── page.tsx           # Home/dashboard page
+│   └── teams/[id]/        # Team detail page
+├── components/            # React components
+│   ├── ui/               # shadcn/ui components
+│   ├── TeamCard.tsx
+│   ├── MemberCard.tsx
+│   └── AgendaItem.tsx
+├── lib/                   # Utilities
+│   ├── supabase.ts       # Supabase client
+│   ├── db.types.ts       # Database types
+│   └── db-operations.ts  # CRUD operations
+└── supabase/             # Supabase config
+    └── migrations/       # Database migrations
+```
