@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { MemberCard } from '@/components/MemberCard'
+import { Header } from '@/components/Header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useAuth } from '@/lib/auth-context'
 import {
   getTeam,
   createTeamMember,
@@ -13,6 +16,7 @@ import {
   createAgendaItem,
   toggleAgendaItem,
   deleteAgendaItem,
+  updateAgendaItem,
 } from '@/lib/db-operations'
 import type { TeamMember, AgendaItem } from '@/lib/db.types'
 
@@ -20,6 +24,7 @@ export default function TeamPage() {
   const params = useParams()
   const router = useRouter()
   const teamId = params.id as string
+  const { user, loading: authLoading } = useAuth()
 
   const [teamName, setTeamName] = useState('')
   const [members, setMembers] = useState<(TeamMember & { agenda_items: AgendaItem[] })[]>([])
@@ -27,12 +32,18 @@ export default function TeamPage() {
   const [error, setError] = useState<string | null>(null)
   const [newMemberName, setNewMemberName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [dateFilter, setDateFilter] = useState<string>('all')
+  const [includeNoDate, setIncludeNoDate] = useState<boolean>(true)
 
   useEffect(() => {
-    if (teamId) {
+    if (!authLoading && !user) {
+      router.push('/login')
+      return
+    }
+    if (teamId && user) {
       loadTeam()
     }
-  }, [teamId])
+  }, [teamId, user, authLoading, router])
 
   const loadTeam = async () => {
     try {
@@ -81,10 +92,10 @@ export default function TeamPage() {
     }
   }
 
-  const handleAddAgendaItem = async (memberId: string, content: string) => {
+  const handleAddAgendaItem = async (memberId: string, content: string, scheduledDate?: string | null) => {
     try {
       setError(null)
-      const newItem = await createAgendaItem(memberId, content)
+      const newItem = await createAgendaItem(memberId, content, scheduledDate)
       setMembers(
         members.map((member) =>
           member.id === memberId
@@ -96,6 +107,17 @@ export default function TeamPage() {
       setError(err instanceof Error ? err.message : 'Failed to create agenda item')
       console.error('Error creating agenda item:', err)
     }
+  }
+
+  const handleUpdateAgendaItem = async (updatedItem: AgendaItem) => {
+    setMembers(
+      members.map((member) => ({
+        ...member,
+        agenda_items: member.agenda_items.map((item) =>
+          item.id === updatedItem.id ? updatedItem : item
+        ),
+      }))
+    )
   }
 
   const handleToggleAgendaItem = async (id: string, completed: boolean) => {
@@ -132,8 +154,72 @@ export default function TeamPage() {
     }
   }
 
+  const filterAgendaItems = (items: AgendaItem[]): AgendaItem[] => {
+    if (dateFilter === 'all') {
+      return items
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const startOfWeek = new Date(today)
+    startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
+    startOfWeek.setHours(0, 0, 0, 0)
+
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+    endOfWeek.setHours(23, 59, 59, 999)
+
+    return items.filter((item) => {
+      if (!item.scheduled_date) {
+        if (dateFilter === 'no-date') {
+          return true
+        }
+        return includeNoDate
+      }
+
+      const itemDate = new Date(item.scheduled_date)
+      itemDate.setHours(0, 0, 0, 0)
+
+      switch (dateFilter) {
+        case 'today':
+          return itemDate.getTime() === today.getTime()
+        case 'this-week':
+          return itemDate >= startOfWeek && itemDate <= endOfWeek
+        case 'upcoming':
+          return itemDate > today
+        case 'overdue':
+          return itemDate < today && !item.completed
+        case 'no-date':
+          return false
+        default:
+          return true
+      }
+    })
+  }
+
+  const getFilteredMembers = () => {
+    return members.map((member) => ({
+      ...member,
+      agenda_items: filterAgendaItems(member.agenda_items),
+    })).filter((member) => member.agenda_items.length > 0 || dateFilter === 'all')
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <Header />
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-6">
           <Link href="/">
@@ -151,7 +237,7 @@ export default function TeamPage() {
           </div>
         )}
 
-        <div className="mb-6">
+        <div className="mb-6 space-y-4">
           <div className="flex gap-2">
             <Input
               placeholder="Enter member name..."
@@ -168,6 +254,41 @@ export default function TeamPage() {
               {isCreating ? 'Adding...' : 'Add Member'}
             </Button>
           </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label htmlFor="date-filter" className="text-sm font-medium">
+                Filter by date:
+              </label>
+              <select
+                id="date-filter"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="all">All</option>
+                <option value="today">Today</option>
+                <option value="this-week">This Week</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="overdue">Overdue</option>
+                <option value="no-date">No Date</option>
+              </select>
+            </div>
+            {dateFilter !== 'all' && dateFilter !== 'no-date' && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="include-no-date"
+                  checked={includeNoDate}
+                  onCheckedChange={(checked) => setIncludeNoDate(checked === true)}
+                />
+                <label
+                  htmlFor="include-no-date"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Include items with no date
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -180,7 +301,7 @@ export default function TeamPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {members.map((member) => (
+            {getFilteredMembers().map((member) => (
               <MemberCard
                 key={member.id}
                 member={member}
@@ -188,6 +309,7 @@ export default function TeamPage() {
                 onAddAgendaItem={handleAddAgendaItem}
                 onToggleAgendaItem={handleToggleAgendaItem}
                 onDeleteAgendaItem={handleDeleteAgendaItem}
+                onUpdateAgendaItem={handleUpdateAgendaItem}
               />
             ))}
           </div>

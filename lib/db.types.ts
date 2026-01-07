@@ -4,6 +4,7 @@
 export type Team = {
   id: string
   name: string
+  user_id: string
   created_at: string
 }
 
@@ -19,6 +20,7 @@ export type AgendaItem = {
   team_member_id: string
   content: string
   completed: boolean
+  scheduled_date: string | null
   created_at: string
 }
 

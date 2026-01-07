@@ -1,16 +1,23 @@
 "use client"
 
+import { useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { updateAgendaItem } from '@/lib/db-operations'
 import type { AgendaItem } from '@/lib/db.types'
 
 interface AgendaItemProps {
   item: AgendaItem
   onToggle?: (id: string, completed: boolean) => void
   onDelete?: (id: string) => void
+  onUpdate?: (item: AgendaItem) => void
 }
 
-export function AgendaItem({ item, onToggle, onDelete }: AgendaItemProps) {
+export function AgendaItem({ item, onToggle, onDelete, onUpdate }: AgendaItemProps) {
+  const [isEditingDate, setIsEditingDate] = useState(false)
+  const [dateValue, setDateValue] = useState(item.scheduled_date || '')
+
   const handleToggle = () => {
     if (onToggle) {
       onToggle(item.id, !item.completed)
@@ -21,6 +28,47 @@ export function AgendaItem({ item, onToggle, onDelete }: AgendaItemProps) {
     if (onDelete && confirm('Delete this agenda item?')) {
       onDelete(item.id)
     }
+  }
+
+  const handleDateChange = async (newDate: string) => {
+    try {
+      const updatedItem = await updateAgendaItem(item.id, { scheduled_date: newDate || null })
+      if (onUpdate) {
+        onUpdate(updatedItem)
+      }
+      setIsEditingDate(false)
+      setDateValue(newDate)
+    } catch (error) {
+      console.error('Error updating date:', error)
+      setDateValue(item.scheduled_date || '')
+    }
+  }
+
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return ''
+    const itemDate = new Date(dateString)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    itemDate.setHours(0, 0, 0, 0)
+
+    if (itemDate.getTime() === today.getTime()) {
+      return 'Today'
+    } else if (itemDate.getTime() === tomorrow.getTime()) {
+      return 'Tomorrow'
+    } else {
+      return itemDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+  }
+
+  const isOverdue = (): boolean => {
+    if (!item.scheduled_date || item.completed) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const itemDate = new Date(item.scheduled_date)
+    itemDate.setHours(0, 0, 0, 0)
+    return itemDate < today
   }
 
   return (
@@ -40,6 +88,48 @@ export function AgendaItem({ item, onToggle, onDelete }: AgendaItemProps) {
         >
           {item.content}
         </p>
+        {isEditingDate ? (
+          <div className="flex items-center gap-2 mt-1">
+            <Input
+              type="date"
+              value={dateValue}
+              onChange={(e) => setDateValue(e.target.value)}
+              onBlur={() => handleDateChange(dateValue)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleDateChange(dateValue)
+                } else if (e.key === 'Escape') {
+                  setIsEditingDate(false)
+                  setDateValue(item.scheduled_date || '')
+                }
+              }}
+              className="h-7 text-xs"
+              autoFocus
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mt-1">
+            {item.scheduled_date ? (
+              <button
+                onClick={() => setIsEditingDate(true)}
+                className={`text-xs ${
+                  isOverdue()
+                    ? 'text-destructive font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {formatDate(item.scheduled_date)}
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsEditingDate(true)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                + Add date
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {onDelete && (
         <Button

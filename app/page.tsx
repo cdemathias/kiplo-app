@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { TeamCard } from '@/components/TeamCard'
+import { Header } from '@/components/Header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useAuth } from '@/lib/auth-context'
 import { getTeams, createTeam, deleteTeam } from '@/lib/db-operations'
 import type { Team } from '@/lib/db.types'
 
@@ -13,10 +16,18 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [newTeamName, setNewTeamName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
-    loadTeams()
-  }, [])
+    if (!authLoading && !user) {
+      router.push('/login')
+      return
+    }
+    if (user) {
+      loadTeams()
+    }
+  }, [user, authLoading, router])
 
   const loadTeams = async () => {
     try {
@@ -64,11 +75,24 @@ export default function Home() {
     }
   }
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <Header />
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Kiplo</h1>
+          <h1 className="text-4xl font-bold mb-2">Teams</h1>
           <p className="text-muted-foreground">Manage your teams, members, and 1:1 agenda items</p>
         </div>
 

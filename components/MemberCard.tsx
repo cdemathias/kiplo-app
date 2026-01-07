@@ -10,9 +10,10 @@ import type { TeamMember, AgendaItem as AgendaItemType } from '@/lib/db.types'
 interface MemberCardProps {
   member: TeamMember & { agenda_items?: AgendaItemType[] }
   onDelete?: (id: string) => void
-  onAddAgendaItem?: (memberId: string, content: string) => void
+  onAddAgendaItem?: (memberId: string, content: string, scheduledDate?: string | null) => void
   onToggleAgendaItem?: (id: string, completed: boolean) => void
   onDeleteAgendaItem?: (id: string) => void
+  onUpdateAgendaItem?: (item: AgendaItemType) => void
 }
 
 export function MemberCard({
@@ -21,8 +22,10 @@ export function MemberCard({
   onAddAgendaItem,
   onToggleAgendaItem,
   onDeleteAgendaItem,
+  onUpdateAgendaItem,
 }: MemberCardProps) {
   const [newAgendaContent, setNewAgendaContent] = useState('')
+  const [newAgendaDate, setNewAgendaDate] = useState<string>('')
   const [isAddingItem, setIsAddingItem] = useState(false)
   
   const agendaItems = member.agenda_items || []
@@ -32,8 +35,9 @@ export function MemberCard({
   const handleAddAgendaItem = () => {
     if (isAddingItem) {
       if (newAgendaContent.trim() && onAddAgendaItem) {
-        onAddAgendaItem(member.id, newAgendaContent.trim())
+        onAddAgendaItem(member.id, newAgendaContent.trim(), newAgendaDate || null)
         setNewAgendaContent('')
+        setNewAgendaDate('')
         setIsAddingItem(false)
       }
     } else {
@@ -44,6 +48,7 @@ export function MemberCard({
   const handleCancelAdd = () => {
     setIsAddingItem(false)
     setNewAgendaContent('')
+    setNewAgendaDate('')
   }
 
   return (
@@ -79,7 +84,7 @@ export function MemberCard({
           </div>
           
           {isAddingItem && (
-            <div className="mb-3 flex gap-2">
+            <div className="mb-3 space-y-2">
               <Input
                 placeholder="Enter agenda item..."
                 value={newAgendaContent}
@@ -92,23 +97,34 @@ export function MemberCard({
                   }
                 }}
                 autoFocus
-                className="flex-1"
+                className="w-full"
               />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddAgendaItem}
-                disabled={!newAgendaContent.trim()}
-              >
-                Add
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancelAdd}
-              >
-                Cancel
-              </Button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">Schedule for:</label>
+                <Input
+                  type="date"
+                  value={newAgendaDate}
+                  onChange={(e) => setNewAgendaDate(e.target.value)}
+                  className="flex-1"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddAgendaItem}
+                  disabled={!newAgendaContent.trim()}
+                >
+                  Add
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancelAdd}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
           
@@ -122,6 +138,7 @@ export function MemberCard({
                   item={item}
                   onToggle={onToggleAgendaItem}
                   onDelete={onDeleteAgendaItem}
+                  onUpdate={onUpdateAgendaItem}
                 />
               ))}
               {completedItems.length > 0 && (
@@ -133,6 +150,7 @@ export function MemberCard({
                       item={item}
                       onToggle={onToggleAgendaItem}
                       onDelete={onDeleteAgendaItem}
+                      onUpdate={onUpdateAgendaItem}
                     />
                   ))}
                 </div>
