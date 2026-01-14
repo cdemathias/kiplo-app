@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Kiplo",
   description: "Manage your teams, members, and 1:1 agenda items",
+  icons: {
+    icon: "/kiplo-logo-bw.svg",
+  },
 };
 
 export default function RootLayout({
