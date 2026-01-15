@@ -1,46 +1,29 @@
 "use client"
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
-export default function SignUpPage() {
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { signUp } = useAuth()
-  const router = useRouter()
+  const { resetPasswordForEmail } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
-      return
-    }
-
     setLoading(true)
 
     try {
-      const { data, error } = await signUp(email, password)
+      const { error } = await resetPasswordForEmail(email)
       if (error) {
         setError(error.message)
       } else {
-        // Always show success message - email confirmation is required in production
-        // Supabase will send a confirmation email via Brevo SMTP
         setSuccess(true)
       }
     } catch (err) {
@@ -56,17 +39,14 @@ export default function SignUpPage() {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Check your email</CardTitle>
-            <CardDescription>We've sent you a confirmation link</CardDescription>
+            <CardDescription>We've sent you a password reset link</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              Please check your email ({email}) and click the confirmation link to verify your account.
-            </p>
-            <p className="text-xs text-muted-foreground mb-4">
-              Once you click the confirmation link in your email, you'll be able to sign in to your account.
+              Please check your email ({email}) and click the link to reset your password.
             </p>
             <Link href="/login">
-              <Button className="w-full">Go to Sign In</Button>
+              <Button className="w-full">Back to Sign In</Button>
             </Link>
           </CardContent>
         </Card>
@@ -78,8 +58,8 @@ export default function SignUpPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Sign Up</CardTitle>
-          <CardDescription>Create an account to get started</CardDescription>
+          <CardTitle className="text-2xl">Forgot Password</CardTitle>
+          <CardDescription>Enter your email to receive a password reset link</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -102,45 +82,13 @@ export default function SignUpPage() {
                 disabled={loading}
               />
             </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-                minLength={6}
-              />
-              <p className="text-xs text-muted-foreground">Must be at least 6 characters</p>
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-sm font-medium">
-                Confirm Password
-              </label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={loading}
-                minLength={6}
-              />
-            </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Creating account...' : 'Sign Up'}
+              {loading ? 'Sending...' : 'Send Reset Link'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
-            <span className="text-muted-foreground">Already have an account? </span>
             <Link href="/login" className="text-primary hover:underline">
-              Sign in
+              Back to Sign In
             </Link>
           </div>
         </CardContent>
