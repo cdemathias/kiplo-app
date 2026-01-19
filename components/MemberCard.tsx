@@ -9,8 +9,16 @@ import type { TeamMember, AgendaItem as AgendaItemType } from '@/lib/db.types'
 import { cn } from '@/lib/utils'
 import { Play, Square } from 'lucide-react'
 
+function getLocalISODateString(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 interface MemberCardProps {
   member: TeamMember & { agenda_items?: AgendaItemType[] }
+  meetingAgendaItems?: AgendaItemType[]
   onDelete?: (id: string) => void
   onAddAgendaItem?: (memberId: string, content: string, scheduledDate?: string | null) => void
   onToggleAgendaItem?: (id: string, completed: boolean) => void
@@ -23,6 +31,7 @@ interface MemberCardProps {
 
 export function MemberCard({
   member,
+  meetingAgendaItems = [],
   onDelete,
   onAddAgendaItem,
   onToggleAgendaItem,
@@ -35,10 +44,20 @@ export function MemberCard({
   const [newAgendaContent, setNewAgendaContent] = useState('')
   const [newAgendaDate, setNewAgendaDate] = useState<string>('')
   const [isAddingItem, setIsAddingItem] = useState(false)
+  const [showFuture, setShowFuture] = useState(false)
   
   const agendaItems = member.agenda_items || []
-  const pendingItems = agendaItems.filter(item => !item.completed)
-  const completedItems = agendaItems.filter(item => item.completed)
+  const today = getLocalISODateString()
+  const relevantNowOpenItems = agendaItems.filter((item) => {
+    if (item.completed) return false
+    if (!item.scheduled_date) return true
+    return item.scheduled_date <= today
+  })
+  const futureOpenItems = agendaItems.filter((item) => {
+    if (item.completed) return false
+    if (!item.scheduled_date) return false
+    return item.scheduled_date > today
+  })
 
   const handleAddAgendaItem = () => {
     if (isAddingItem) {
@@ -73,7 +92,10 @@ export function MemberCard({
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => onEndMeeting?.(member.id)}
+              onClick={() => {
+                setShowFuture(false)
+                onEndMeeting?.(member.id)
+              }}
               aria-label="End meeting"
               title="End meeting"
             >
@@ -83,7 +105,10 @@ export function MemberCard({
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => onStartMeeting?.(member.id)}
+              onClick={() => {
+                setShowFuture(false)
+                onStartMeeting?.(member.id)
+              }}
               aria-label="Start meeting"
               title="Start meeting"
             >
@@ -163,23 +188,15 @@ export function MemberCard({
             </div>
           )}
           
-          {agendaItems.length === 0 && !isAddingItem ? (
+          {!isMeetingActive && agendaItems.length === 0 && !isAddingItem ? (
             <p className="text-sm text-muted-foreground">No agenda items yet</p>
           ) : (
             <div className="space-y-2">
-              {pendingItems.map((item) => (
-                <AgendaItem
-                  key={item.id}
-                  item={item}
-                  onToggle={onToggleAgendaItem}
-                  onDelete={onDeleteAgendaItem}
-                  onUpdate={onUpdateAgendaItem}
-                />
-              ))}
-              {completedItems.length > 0 && (
-                <div className="pt-2 border-t">
-                  <p className="text-xs text-muted-foreground mb-2">Completed:</p>
-                  {completedItems.map((item) => (
+              {isMeetingActive ? (
+                meetingAgendaItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No agenda items in this meeting</p>
+                ) : (
+                  meetingAgendaItems.map((item) => (
                     <AgendaItem
                       key={item.id}
                       item={item}
@@ -187,8 +204,51 @@ export function MemberCard({
                       onDelete={onDeleteAgendaItem}
                       onUpdate={onUpdateAgendaItem}
                     />
-                  ))}
-                </div>
+                  ))
+                )
+              ) : (
+                <>
+                  {relevantNowOpenItems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No agenda items due today</p>
+                  ) : (
+                    relevantNowOpenItems.map((item) => (
+                      <AgendaItem
+                        key={item.id}
+                        item={item}
+                        onToggle={onToggleAgendaItem}
+                        onDelete={onDeleteAgendaItem}
+                        onUpdate={onUpdateAgendaItem}
+                      />
+                    ))
+                  )}
+
+                  {futureOpenItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFuture((v) => !v)}
+                      className="mt-2 text-xs text-muted-foreground hover:underline"
+                    >
+                      {showFuture
+                        ? 'Hide future items'
+                        : `See future items${futureOpenItems.length ? ` (${futureOpenItems.length})` : ''}`}
+                    </button>
+                  )}
+
+                  {showFuture && futureOpenItems.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs text-muted-foreground mb-2">Future:</p>
+                      {futureOpenItems.map((item) => (
+                        <AgendaItem
+                          key={item.id}
+                          item={item}
+                          onToggle={onToggleAgendaItem}
+                          onDelete={onDeleteAgendaItem}
+                          onUpdate={onUpdateAgendaItem}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
