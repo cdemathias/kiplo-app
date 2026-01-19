@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Check your email</CardTitle>
-            <CardDescription>We've sent you a password reset link</CardDescription>
+            <CardDescription>We&apos;ve sent you a password reset link</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
