@@ -56,14 +56,14 @@ export default function SignUpPage() {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Check your email</CardTitle>
-            <CardDescription>We've sent you a confirmation link</CardDescription>
+            <CardDescription>We&apos;ve sent you a confirmation link</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
               Please check your email ({email}) and click the confirmation link to verify your account.
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              Once you click the confirmation link in your email, you'll be able to sign in to your account.
+              Once you click the confirmation link in your email, you&apos;ll be able to sign in to your account.
             </p>
             <Link href="/login">
               <Button className="w-full">Go to Sign In</Button>

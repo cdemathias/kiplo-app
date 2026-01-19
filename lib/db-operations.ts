@@ -1,5 +1,5 @@
 import { createClientSupabase } from './supabase'
-import type { Team, TeamMember, AgendaItem } from './db.types'
+import type { Team, TeamMember, AgendaItem, MeetingSession } from './db.types'
 
 // Teams operations
 export async function getTeams() {
@@ -28,7 +28,7 @@ export async function getTeam(id: string) {
 
   const { data, error } = await supabase
     .from('teams')
-    .select('*, team_members(*, agenda_items(*))')
+    .select('*, team_members(*, agenda_items(*), meeting_sessions(*))')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -325,5 +325,79 @@ export async function deleteAgendaItem(id: string) {
     .eq('id', id)
 
   if (error) throw error
+}
+
+// Meeting sessions operations
+export async function startMeetingSession(teamMemberId: string) {
+  const supabase = createClientSupabase()
+
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
+  const { data, error } = await supabase
+    .from('meeting_sessions')
+    .insert([{ team_member_id: teamMemberId }])
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as MeetingSession
+}
+
+export async function endMeetingSession(teamMemberId: string) {
+  const supabase = createClientSupabase()
+
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
+  const { data, error } = await supabase
+    .from('meeting_sessions')
+    .update({ ended_at: new Date().toISOString() })
+    .eq('team_member_id', teamMemberId)
+    .is('ended_at', null)
+    .select()
+    .single()
+
+  if (error) throw error
+  if (!data) throw new Error('No active meeting session found')
+  return data as MeetingSession
 }
 

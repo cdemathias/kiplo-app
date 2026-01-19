@@ -17,8 +17,10 @@ import {
   toggleAgendaItem,
   deleteAgendaItem,
   updateAgendaItem,
+  startMeetingSession,
+  endMeetingSession,
 } from '@/lib/db-operations'
-import type { TeamMember, AgendaItem } from '@/lib/db.types'
+import type { TeamMember, AgendaItem, MeetingSession } from '@/lib/db.types'
 
 export default function TeamPage() {
   const params = useParams()
@@ -27,7 +29,9 @@ export default function TeamPage() {
   const { user, loading: authLoading } = useAuth()
 
   const [teamName, setTeamName] = useState('')
-  const [members, setMembers] = useState<(TeamMember & { agenda_items: AgendaItem[] })[]>([])
+  const [members, setMembers] = useState<
+    (TeamMember & { agenda_items: AgendaItem[]; meeting_sessions: MeetingSession[] })[]
+  >([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newMemberName, setNewMemberName] = useState('')
@@ -51,7 +55,16 @@ export default function TeamPage() {
       setError(null)
       const data = await getTeam(teamId)
       setTeamName(data.name)
-      setMembers(data.team_members || [])
+      const teamMembers = (data.team_members || []) as Array<
+        TeamMember & { agenda_items?: AgendaItem[]; meeting_sessions?: MeetingSession[] }
+      >
+      setMembers(
+        teamMembers.map((member) => ({
+          ...member,
+          agenda_items: member.agenda_items || [],
+          meeting_sessions: member.meeting_sessions || [],
+        }))
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load team')
       console.error('Error loading team:', err)
@@ -67,7 +80,7 @@ export default function TeamPage() {
       setIsCreating(true)
       setError(null)
       const newMember = await createTeamMember(teamId, newMemberName.trim())
-      setMembers([{ ...newMember, agenda_items: [] }, ...members])
+      setMembers([{ ...newMember, agenda_items: [], meeting_sessions: [] }, ...members])
       setNewMemberName('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create member')
@@ -151,6 +164,47 @@ export default function TeamPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete agenda item')
       console.error('Error deleting agenda item:', err)
+    }
+  }
+
+  const isMeetingActive = (member: { meeting_sessions?: MeetingSession[] }) => {
+    return (member.meeting_sessions || []).some((session) => session.ended_at == null)
+  }
+
+  const handleStartMeeting = async (memberId: string) => {
+    try {
+      setError(null)
+      const newSession = await startMeetingSession(memberId)
+      setMembers(
+        members.map((member) =>
+          member.id === memberId
+            ? { ...member, meeting_sessions: [newSession, ...(member.meeting_sessions || [])] }
+            : member
+        )
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start meeting')
+      console.error('Error starting meeting:', err)
+    }
+  }
+
+  const handleEndMeeting = async (memberId: string) => {
+    try {
+      setError(null)
+      const endedSession = await endMeetingSession(memberId)
+      setMembers(
+        members.map((member) => {
+          if (member.id !== memberId) return member
+          const existing = member.meeting_sessions || []
+          const next = existing.some((s) => s.id === endedSession.id)
+            ? existing.map((s) => (s.id === endedSession.id ? endedSession : s))
+            : [endedSession, ...existing]
+          return { ...member, meeting_sessions: next }
+        })
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to end meeting')
+      console.error('Error ending meeting:', err)
     }
   }
 
@@ -310,6 +364,9 @@ export default function TeamPage() {
                 onToggleAgendaItem={handleToggleAgendaItem}
                 onDeleteAgendaItem={handleDeleteAgendaItem}
                 onUpdateAgendaItem={handleUpdateAgendaItem}
+                isMeetingActive={isMeetingActive(member)}
+                onStartMeeting={handleStartMeeting}
+                onEndMeeting={handleEndMeeting}
               />
             ))}
           </div>

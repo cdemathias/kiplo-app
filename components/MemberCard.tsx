@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AgendaItem } from './AgendaItem'
 import type { TeamMember, AgendaItem as AgendaItemType } from '@/lib/db.types'
+import { cn } from '@/lib/utils'
+import { Play, Square } from 'lucide-react'
 
 interface MemberCardProps {
   member: TeamMember & { agenda_items?: AgendaItemType[] }
@@ -14,6 +16,9 @@ interface MemberCardProps {
   onToggleAgendaItem?: (id: string, completed: boolean) => void
   onDeleteAgendaItem?: (id: string) => void
   onUpdateAgendaItem?: (item: AgendaItemType) => void
+  isMeetingActive?: boolean
+  onStartMeeting?: (memberId: string) => void | Promise<void>
+  onEndMeeting?: (memberId: string) => void | Promise<void>
 }
 
 export function MemberCard({
@@ -23,6 +28,9 @@ export function MemberCard({
   onToggleAgendaItem,
   onDeleteAgendaItem,
   onUpdateAgendaItem,
+  isMeetingActive = false,
+  onStartMeeting,
+  onEndMeeting,
 }: MemberCardProps) {
   const [newAgendaContent, setNewAgendaContent] = useState('')
   const [newAgendaDate, setNewAgendaDate] = useState<string>('')
@@ -52,10 +60,37 @@ export function MemberCard({
   }
 
   return (
-    <Card>
+    <Card
+      className={cn(
+        "transition-colors duration-200",
+        isMeetingActive && "border-2 border-[#F11E7D]"
+      )}
+    >
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>{member.name}</span>
+        <CardTitle>{member.name}</CardTitle>
+        <CardAction className="flex items-center gap-2">
+          {isMeetingActive ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onEndMeeting?.(member.id)}
+              aria-label="End meeting"
+              title="End meeting"
+            >
+              <Square />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onStartMeeting?.(member.id)}
+              aria-label="Start meeting"
+              title="Start meeting"
+            >
+              <Play />
+            </Button>
+          )}
+
           {onDelete && (
             <Button
               variant="ghost"
@@ -66,7 +101,7 @@ export function MemberCard({
               Delete
             </Button>
           )}
-        </CardTitle>
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
