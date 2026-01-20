@@ -17,9 +17,18 @@ import {
   deleteAgendaItem,
   startMeetingSession,
   endMeetingSession,
-  getActiveMeetingSessionAgendaItems,
 } from '@/lib/db-operations'
 import type { TeamMember, AgendaItem, MeetingSession } from '@/lib/db.types'
+
+type MeetingSessionAgendaItemLink = { added_at: string; agenda_items: AgendaItem | null }
+type MeetingSessionWithLinks = MeetingSession & { meeting_session_agenda_items?: MeetingSessionAgendaItemLink[] }
+
+function getLocalISODateString(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
 
 export default function TeamPage() {
   const params = useParams()
@@ -54,7 +63,7 @@ export default function TeamPage() {
       const data = await getTeam(teamId)
       setTeamName(data.name)
       const teamMembers = (data.team_members || []) as Array<
-        TeamMember & { agenda_items?: AgendaItem[]; meeting_sessions?: MeetingSession[] }
+        TeamMember & { agenda_items?: AgendaItem[]; meeting_sessions?: MeetingSessionWithLinks[] }
       >
       const normalizedMembers = teamMembers.map((member) => ({
           ...member,
@@ -64,19 +73,21 @@ export default function TeamPage() {
 
       setMembers(normalizedMembers)
 
-      // Load meeting session agenda items for any active sessions
-      const activeMembers = normalizedMembers.filter((m) => isMeetingActive(m))
-      if (activeMembers.length === 0) {
-        setMeetingAgendaItemsByMemberId({})
-      } else {
-        const entries = await Promise.all(
-          activeMembers.map(async (m) => {
-            const items = await getActiveMeetingSessionAgendaItems(m.id)
-            return [m.id, items] as const
-          })
-        )
-        setMeetingAgendaItemsByMemberId(Object.fromEntries(entries))
+      // Derive meeting session agenda items from the single getTeam() payload (avoid N+1 fetches)
+      const nextMeetingAgendaItemsByMemberId: Record<string, AgendaItem[]> = {}
+      for (const m of normalizedMembers) {
+        const activeSession = (m.meeting_sessions as MeetingSessionWithLinks[]).find((s) => s.ended_at == null)
+        const links = activeSession?.meeting_session_agenda_items || []
+        if (links.length > 0) {
+          const sorted = [...links].sort(
+            (a, b) => new Date(a.added_at).getTime() - new Date(b.added_at).getTime()
+          )
+          nextMeetingAgendaItemsByMemberId[m.id] = sorted
+            .map((row) => row.agenda_items)
+            .filter((x: AgendaItem | null): x is AgendaItem => Boolean(x))
+        }
       }
+      setMeetingAgendaItemsByMemberId(nextMeetingAgendaItemsByMemberId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load team')
       console.error('Error loading team:', err)
@@ -211,6 +222,15 @@ export default function TeamPage() {
     return (member.meeting_sessions || []).some((session) => session.ended_at == null)
   }
 
+  const getRelevantNowOpenItems = (items: AgendaItem[]) => {
+    const today = getLocalISODateString()
+    return items.filter((item) => {
+      if (item.completed) return false
+      if (!item.scheduled_date) return true
+      return item.scheduled_date <= today
+    })
+  }
+
   const handleStartMeeting = async (memberId: string) => {
     try {
       setError(null)
@@ -223,7 +243,9 @@ export default function TeamPage() {
         )
       )
 
-      const items = await getActiveMeetingSessionAgendaItems(memberId)
+      // Server snapshots eligible open items at meeting start; mirror that snapshot locally to avoid extra fetches.
+      const member = members.find((m) => m.id === memberId)
+      const items = member ? getRelevantNowOpenItems(member.agenda_items || []) : []
       setMeetingAgendaItemsByMemberId((prev) => ({ ...prev, [memberId]: items }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start meeting')
