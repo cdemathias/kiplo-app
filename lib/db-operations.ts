@@ -11,11 +11,15 @@ function getLocalISODateString(date: Date = new Date()): string {
 // Teams operations
 export async function getTeams() {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts rows to the signed-in user; avoid extra auth round-trips here.
   const { data, error } = await supabase
     .from('teams')
-    .select('id, name, created_at')
+    .select('*')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -24,14 +28,16 @@ export async function getTeams() {
 
 export async function getTeam(id: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts rows to the signed-in user; avoid extra auth round-trips here.
   const { data, error } = await supabase
     .from('teams')
-    .select(
-      'id, name, created_at, team_members(id, team_id, name, created_at, agenda_items(id, team_member_id, content, completed, scheduled_date, created_at), meeting_sessions(id, team_member_id, started_at, ended_at))'
-    )
+    .select('*, team_members(*, agenda_items(*), meeting_sessions(*))')
     .eq('id', id)
+    .eq('user_id', user.id)
     .single()
 
   if (error) throw error
@@ -57,12 +63,16 @@ export async function createTeam(name: string) {
 
 export async function deleteTeam(id: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts rows to the signed-in user.
   const { error } = await supabase
     .from('teams')
     .delete()
     .eq('id', id)
+    .eq('user_id', user.id)
 
   if (error) throw error
 }
@@ -70,8 +80,21 @@ export async function deleteTeam(id: string) {
 // Team members operations
 export async function getTeamMembers(teamId: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts rows to the signed-in user.
+  // Verify team belongs to user
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', teamId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Team not found or access denied')
+
   const { data, error } = await supabase
     .from('team_members')
     .select('*, agenda_items(*)')
@@ -84,8 +107,21 @@ export async function getTeamMembers(teamId: string) {
 
 export async function createTeamMember(teamId: string, name: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts inserts to the signed-in user's teams.
+  // Verify team belongs to user
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', teamId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Team not found or access denied')
+
   const { data, error } = await supabase
     .from('team_members')
     .insert([{ team_id: teamId, name }])
@@ -98,8 +134,29 @@ export async function createTeamMember(teamId: string, name: string) {
 
 export async function deleteTeamMember(id: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts deletes to the signed-in user's teams.
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', id)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { error } = await supabase
     .from('team_members')
     .delete()
@@ -111,8 +168,29 @@ export async function deleteTeamMember(id: string) {
 // Agenda items operations
 export async function getAgendaItems(teamMemberId: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts rows to the signed-in user.
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { data, error } = await supabase
     .from('agenda_items')
     .select('*')
@@ -125,8 +203,29 @@ export async function getAgendaItems(teamMemberId: string) {
 
 export async function createAgendaItem(teamMemberId: string, content: string, scheduledDate?: string | null) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts inserts to the signed-in user.
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const insertData: { team_member_id: string; content: string; scheduled_date?: string | null } = {
     team_member_id: teamMemberId,
     content,
@@ -170,8 +269,37 @@ export async function createAgendaItem(teamMemberId: string, content: string, sc
 
 export async function updateAgendaItem(id: string, updates: Partial<AgendaItem>) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts updates to the signed-in user.
+  // Get agenda item and verify it belongs to user's team
+  const { data: item } = await supabase
+    .from('agenda_items')
+    .select('team_member_id')
+    .eq('id', id)
+    .single()
+
+  if (!item) throw new Error('Agenda item not found')
+
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', item.team_member_id)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { data, error } = await supabase
     .from('agenda_items')
     .update(updates)
@@ -189,8 +317,37 @@ export async function toggleAgendaItem(id: string, completed: boolean) {
 
 export async function deleteAgendaItem(id: string) {
   const supabase = createClientSupabase()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
 
-  // RLS restricts deletes to the signed-in user.
+  // Get agenda item and verify it belongs to user's team
+  const { data: item } = await supabase
+    .from('agenda_items')
+    .select('team_member_id')
+    .eq('id', id)
+    .single()
+
+  if (!item) throw new Error('Agenda item not found')
+
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', item.team_member_id)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { error } = await supabase
     .from('agenda_items')
     .delete()
@@ -203,7 +360,28 @@ export async function deleteAgendaItem(id: string) {
 export async function startMeetingSession(teamMemberId: string) {
   const supabase = createClientSupabase()
 
-  // RLS restricts inserts to the signed-in user.
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { data, error } = await supabase
     .from('meeting_sessions')
     .insert([{ team_member_id: teamMemberId }])
@@ -247,7 +425,28 @@ export async function startMeetingSession(teamMemberId: string) {
 export async function endMeetingSession(teamMemberId: string) {
   const supabase = createClientSupabase()
 
-  // RLS restricts updates to the signed-in user.
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { data, error } = await supabase
     .from('meeting_sessions')
     .update({ ended_at: new Date().toISOString() })
@@ -264,7 +463,28 @@ export async function endMeetingSession(teamMemberId: string) {
 export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): Promise<AgendaItem[]> {
   const supabase = createClientSupabase()
 
-  // RLS restricts reads to the signed-in user.
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
   const { data: sessions, error: sessionError } = await supabase
     .from('meeting_sessions')
     .select('id')
@@ -285,11 +505,9 @@ export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): 
 
   if (linksError) throw linksError
 
-  // Supabase can return nested selects as either an object or an array depending on relation metadata.
-  type MeetingSessionAgendaItemRow = { agenda_items: AgendaItem | AgendaItem[] | null }
-  const rows = (links || []) as unknown as MeetingSessionAgendaItemRow[]
+  const rows = (links || []) as Array<{ agenda_items: AgendaItem | null }>
   return rows
-    .map((row) => (Array.isArray(row.agenda_items) ? row.agenda_items[0] ?? null : row.agenda_items))
+    .map((row) => row.agenda_items)
     .filter((x: AgendaItem | null): x is AgendaItem => Boolean(x))
 }
 
