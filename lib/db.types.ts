@@ -31,6 +31,13 @@ export type MeetingSession = {
   ended_at: string | null
 }
 
+export type MeetingSessionAgendaItem = {
+  id: string
+  meeting_session_id: string
+  agenda_item_id: string
+  added_at: string
+}
+
 // Extended types with relations
 export type TeamWithMembers = Team & {
   team_members: TeamMember[]

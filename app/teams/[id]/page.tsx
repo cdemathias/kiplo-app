@@ -7,7 +7,6 @@ import { MemberCard } from '@/components/MemberCard'
 import { Header } from '@/components/Header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useAuth } from '@/lib/auth-context'
 import {
   getTeam,
@@ -16,9 +15,9 @@ import {
   createAgendaItem,
   toggleAgendaItem,
   deleteAgendaItem,
-  updateAgendaItem,
   startMeetingSession,
   endMeetingSession,
+  getActiveMeetingSessionAgendaItems,
 } from '@/lib/db-operations'
 import type { TeamMember, AgendaItem, MeetingSession } from '@/lib/db.types'
 
@@ -32,12 +31,11 @@ export default function TeamPage() {
   const [members, setMembers] = useState<
     (TeamMember & { agenda_items: AgendaItem[]; meeting_sessions: MeetingSession[] })[]
   >([])
+  const [meetingAgendaItemsByMemberId, setMeetingAgendaItemsByMemberId] = useState<Record<string, AgendaItem[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newMemberName, setNewMemberName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
-  const [dateFilter, setDateFilter] = useState<string>('all')
-  const [includeNoDate, setIncludeNoDate] = useState<boolean>(true)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -58,13 +56,27 @@ export default function TeamPage() {
       const teamMembers = (data.team_members || []) as Array<
         TeamMember & { agenda_items?: AgendaItem[]; meeting_sessions?: MeetingSession[] }
       >
-      setMembers(
-        teamMembers.map((member) => ({
+      const normalizedMembers = teamMembers.map((member) => ({
           ...member,
           agenda_items: member.agenda_items || [],
           meeting_sessions: member.meeting_sessions || [],
         }))
-      )
+
+      setMembers(normalizedMembers)
+
+      // Load meeting session agenda items for any active sessions
+      const activeMembers = normalizedMembers.filter((m) => isMeetingActive(m))
+      if (activeMembers.length === 0) {
+        setMeetingAgendaItemsByMemberId({})
+      } else {
+        const entries = await Promise.all(
+          activeMembers.map(async (m) => {
+            const items = await getActiveMeetingSessionAgendaItems(m.id)
+            return [m.id, items] as const
+          })
+        )
+        setMeetingAgendaItemsByMemberId(Object.fromEntries(entries))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load team')
       console.error('Error loading team:', err)
@@ -116,6 +128,14 @@ export default function TeamPage() {
             : member
         )
       )
+
+      // If a meeting is active, also keep the meeting list in sync (server already linked it)
+      if (isMeetingActive(members.find((m) => m.id === memberId) || {})) {
+        setMeetingAgendaItemsByMemberId((prev) => ({
+          ...prev,
+          [memberId]: [newItem, ...(prev[memberId] || [])],
+        }))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create agenda item')
       console.error('Error creating agenda item:', err)
@@ -131,6 +151,16 @@ export default function TeamPage() {
         ),
       }))
     )
+
+    setMeetingAgendaItemsByMemberId((prev) => {
+      const next: Record<string, AgendaItem[]> = { ...prev }
+      for (const [memberId, items] of Object.entries(prev)) {
+        if (items.some((i) => i.id === updatedItem.id)) {
+          next[memberId] = items.map((i) => (i.id === updatedItem.id ? updatedItem : i))
+        }
+      }
+      return next
+    })
   }
 
   const handleToggleAgendaItem = async (id: string, completed: boolean) => {
@@ -145,6 +175,16 @@ export default function TeamPage() {
           ),
         }))
       )
+
+      setMeetingAgendaItemsByMemberId((prev) => {
+        const next: Record<string, AgendaItem[]> = { ...prev }
+        for (const [memberId, items] of Object.entries(prev)) {
+          if (items.some((i) => i.id === id)) {
+            next[memberId] = items.map((i) => (i.id === id ? { ...i, completed } : i))
+          }
+        }
+        return next
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update agenda item')
       console.error('Error updating agenda item:', err)
@@ -182,6 +222,9 @@ export default function TeamPage() {
             : member
         )
       )
+
+      const items = await getActiveMeetingSessionAgendaItems(memberId)
+      setMeetingAgendaItemsByMemberId((prev) => ({ ...prev, [memberId]: items }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start meeting')
       console.error('Error starting meeting:', err)
@@ -202,62 +245,19 @@ export default function TeamPage() {
           return { ...member, meeting_sessions: next }
         })
       )
+
+      setMeetingAgendaItemsByMemberId((prev) => {
+        const next = { ...prev }
+        delete next[memberId]
+        return next
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to end meeting')
       console.error('Error ending meeting:', err)
     }
   }
 
-  const filterAgendaItems = (items: AgendaItem[]): AgendaItem[] => {
-    if (dateFilter === 'all') {
-      return items
-    }
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const startOfWeek = new Date(today)
-    startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
-    startOfWeek.setHours(0, 0, 0, 0)
-
-    const endOfWeek = new Date(startOfWeek)
-    endOfWeek.setDate(startOfWeek.getDate() + 6)
-    endOfWeek.setHours(23, 59, 59, 999)
-
-    return items.filter((item) => {
-      if (!item.scheduled_date) {
-        if (dateFilter === 'no-date') {
-          return true
-        }
-        return includeNoDate
-      }
-
-      const itemDate = new Date(item.scheduled_date)
-      itemDate.setHours(0, 0, 0, 0)
-
-      switch (dateFilter) {
-        case 'today':
-          return itemDate.getTime() === today.getTime()
-        case 'this-week':
-          return itemDate >= startOfWeek && itemDate <= endOfWeek
-        case 'upcoming':
-          return itemDate > today
-        case 'overdue':
-          return itemDate < today && !item.completed
-        case 'no-date':
-          return false
-        default:
-          return true
-      }
-    })
-  }
-
-  const getFilteredMembers = () => {
-    return members.map((member) => ({
-      ...member,
-      agenda_items: filterAgendaItems(member.agenda_items),
-    })).filter((member) => member.agenda_items.length > 0 || dateFilter === 'all')
-  }
+  const getMembers = () => members
 
   if (authLoading) {
     return (
@@ -308,41 +308,6 @@ export default function TeamPage() {
               {isCreating ? 'Adding...' : 'Add Member'}
             </Button>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label htmlFor="date-filter" className="text-sm font-medium">
-                Filter by date:
-              </label>
-              <select
-                id="date-filter"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="all">All</option>
-                <option value="today">Today</option>
-                <option value="this-week">This Week</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="overdue">Overdue</option>
-                <option value="no-date">No Date</option>
-              </select>
-            </div>
-            {dateFilter !== 'all' && dateFilter !== 'no-date' && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="include-no-date"
-                  checked={includeNoDate}
-                  onCheckedChange={(checked) => setIncludeNoDate(checked === true)}
-                />
-                <label
-                  htmlFor="include-no-date"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Include items with no date
-                </label>
-              </div>
-            )}
-          </div>
         </div>
 
         {loading ? (
@@ -355,10 +320,11 @@ export default function TeamPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {getFilteredMembers().map((member) => (
+            {getMembers().map((member) => (
               <MemberCard
                 key={member.id}
                 member={member}
+                meetingAgendaItems={meetingAgendaItemsByMemberId[member.id] || []}
                 onDelete={handleDeleteMember}
                 onAddAgendaItem={handleAddAgendaItem}
                 onToggleAgendaItem={handleToggleAgendaItem}

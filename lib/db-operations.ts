@@ -1,6 +1,13 @@
 import { createClientSupabase } from './supabase'
 import type { Team, TeamMember, AgendaItem, MeetingSession } from './db.types'
 
+function getLocalISODateString(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 // Teams operations
 export async function getTeams() {
   const supabase = createClientSupabase()
@@ -235,7 +242,29 @@ export async function createAgendaItem(teamMemberId: string, content: string, sc
     .single()
 
   if (error) throw error
-  return data as AgendaItem
+  const created = data as AgendaItem
+
+  // If a meeting session is active for this member, include the new item in the session scope.
+  const { data: activeSessions, error: activeSessionError } = await supabase
+    .from('meeting_sessions')
+    .select('id')
+    .eq('team_member_id', teamMemberId)
+    .is('ended_at', null)
+    .order('started_at', { ascending: false })
+    .limit(1)
+
+  if (activeSessionError) throw activeSessionError
+  const activeSessionId = activeSessions?.[0]?.id
+
+  if (activeSessionId) {
+    const { error: linkError } = await supabase
+      .from('meeting_session_agenda_items')
+      .insert([{ meeting_session_id: activeSessionId, agenda_item_id: created.id }])
+
+    if (linkError) throw linkError
+  }
+
+  return created
 }
 
 export async function updateAgendaItem(id: string, updates: Partial<AgendaItem>) {
@@ -360,7 +389,37 @@ export async function startMeetingSession(teamMemberId: string) {
     .single()
 
   if (error) throw error
-  return data as MeetingSession
+  const session = data as MeetingSession
+
+  // Snapshot eligible open items at meeting start: RelevantNowOpen
+  const { data: openItems, error: openItemsError } = await supabase
+    .from('agenda_items')
+    .select('*')
+    .eq('team_member_id', teamMemberId)
+    .eq('completed', false)
+
+  if (openItemsError) throw openItemsError
+
+  const today = getLocalISODateString()
+  const relevantNowOpen = (openItems as AgendaItem[]).filter((item) => {
+    if (!item.scheduled_date) return true
+    return item.scheduled_date <= today
+  })
+
+  if (relevantNowOpen.length > 0) {
+    const { error: snapshotError } = await supabase
+      .from('meeting_session_agenda_items')
+      .insert(
+        relevantNowOpen.map((item) => ({
+          meeting_session_id: session.id,
+          agenda_item_id: item.id,
+        }))
+      )
+
+    if (snapshotError) throw snapshotError
+  }
+
+  return session
 }
 
 export async function endMeetingSession(teamMemberId: string) {
@@ -399,5 +458,58 @@ export async function endMeetingSession(teamMemberId: string) {
   if (error) throw error
   if (!data) throw new Error('No active meeting session found')
   return data as MeetingSession
+}
+
+export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): Promise<AgendaItem[]> {
+  const supabase = createClientSupabase()
+
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get team member and verify team belongs to user
+  const { data: member } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('id', teamMemberId)
+    .single()
+
+  if (!member) throw new Error('Team member not found')
+
+  const { data: team } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('id', member.team_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!team) throw new Error('Access denied')
+
+  const { data: sessions, error: sessionError } = await supabase
+    .from('meeting_sessions')
+    .select('id')
+    .eq('team_member_id', teamMemberId)
+    .is('ended_at', null)
+    .order('started_at', { ascending: false })
+    .limit(1)
+
+  if (sessionError) throw sessionError
+  const sessionId = sessions?.[0]?.id
+  if (!sessionId) return []
+
+  const { data: links, error: linksError } = await supabase
+    .from('meeting_session_agenda_items')
+    .select('added_at, agenda_items(*)')
+    .eq('meeting_session_id', sessionId)
+    .order('added_at', { ascending: false })
+
+  if (linksError) throw linksError
+
+  // Supabase can return nested selects as either an object or an array depending on relation metadata.
+  type MeetingSessionAgendaItemRow = { agenda_items: AgendaItem | AgendaItem[] | null }
+  const rows = (links || []) as unknown as MeetingSessionAgendaItemRow[]
+  return rows
+    .map((row) => (Array.isArray(row.agenda_items) ? row.agenda_items[0] ?? null : row.agenda_items))
+    .filter((x: AgendaItem | null): x is AgendaItem => Boolean(x))
 }
 
