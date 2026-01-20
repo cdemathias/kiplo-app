@@ -8,18 +8,22 @@ function getLocalISODateString(date: Date = new Date()): string {
   return `${y}-${m}-${d}`
 }
 
+async function requireUserId(): Promise<string> {
+  const supabase = createClientSupabase()
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  const userId = data.session?.user?.id
+  if (!userId) throw new Error('User not authenticated')
+  return userId
+}
+
 // Teams operations
 export async function getTeams() {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
 
   const { data, error } = await supabase
     .from('teams')
     .select('*')
-    .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -28,16 +32,11 @@ export async function getTeams() {
 
 export async function getTeam(id: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
 
   const { data, error } = await supabase
     .from('teams')
-    .select('*, team_members(*, agenda_items(*), meeting_sessions(*))')
+    .select('*, team_members(*, agenda_items(*), meeting_sessions(*, meeting_session_agenda_items(added_at, agenda_items(*))))')
     .eq('id', id)
-    .eq('user_id', user.id)
     .single()
 
   if (error) throw error
@@ -46,14 +45,11 @@ export async function getTeam(id: string) {
 
 export async function createTeam(name: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
+  const userId = await requireUserId()
 
   const { data, error } = await supabase
     .from('teams')
-    .insert([{ name, user_id: user.id }])
+    .insert([{ name, user_id: userId }])
     .select()
     .single()
 
@@ -63,16 +59,11 @@ export async function createTeam(name: string) {
 
 export async function deleteTeam(id: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
 
   const { error } = await supabase
     .from('teams')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id)
 
   if (error) throw error
 }
@@ -80,20 +71,6 @@ export async function deleteTeam(id: string) {
 // Team members operations
 export async function getTeamMembers(teamId: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Verify team belongs to user
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', teamId)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Team not found or access denied')
 
   const { data, error } = await supabase
     .from('team_members')
@@ -107,20 +84,6 @@ export async function getTeamMembers(teamId: string) {
 
 export async function createTeamMember(teamId: string, name: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Verify team belongs to user
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', teamId)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Team not found or access denied')
 
   const { data, error } = await supabase
     .from('team_members')
@@ -134,28 +97,6 @@ export async function createTeamMember(teamId: string, name: string) {
 
 export async function deleteTeamMember(id: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get team member and verify team belongs to user
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', id)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const { error } = await supabase
     .from('team_members')
@@ -168,28 +109,6 @@ export async function deleteTeamMember(id: string) {
 // Agenda items operations
 export async function getAgendaItems(teamMemberId: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get team member and verify team belongs to user
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', teamMemberId)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const { data, error } = await supabase
     .from('agenda_items')
@@ -203,34 +122,12 @@ export async function getAgendaItems(teamMemberId: string) {
 
 export async function createAgendaItem(teamMemberId: string, content: string, scheduledDate?: string | null) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get team member and verify team belongs to user
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', teamMemberId)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const insertData: { team_member_id: string; content: string; scheduled_date?: string | null } = {
     team_member_id: teamMemberId,
     content,
   }
-  
+
   if (scheduledDate !== undefined) {
     insertData.scheduled_date = scheduledDate || null
   }
@@ -269,36 +166,6 @@ export async function createAgendaItem(teamMemberId: string, content: string, sc
 
 export async function updateAgendaItem(id: string, updates: Partial<AgendaItem>) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get agenda item and verify it belongs to user's team
-  const { data: item } = await supabase
-    .from('agenda_items')
-    .select('team_member_id')
-    .eq('id', id)
-    .single()
-
-  if (!item) throw new Error('Agenda item not found')
-
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', item.team_member_id)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const { data, error } = await supabase
     .from('agenda_items')
@@ -317,36 +184,6 @@ export async function toggleAgendaItem(id: string, completed: boolean) {
 
 export async function deleteAgendaItem(id: string) {
   const supabase = createClientSupabase()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get agenda item and verify it belongs to user's team
-  const { data: item } = await supabase
-    .from('agenda_items')
-    .select('team_member_id')
-    .eq('id', id)
-    .single()
-
-  if (!item) throw new Error('Agenda item not found')
-
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', item.team_member_id)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const { error } = await supabase
     .from('agenda_items')
@@ -359,28 +196,6 @@ export async function deleteAgendaItem(id: string) {
 // Meeting sessions operations
 export async function startMeetingSession(teamMemberId: string) {
   const supabase = createClientSupabase()
-
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get team member and verify team belongs to user
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', teamMemberId)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const { data, error } = await supabase
     .from('meeting_sessions')
@@ -425,28 +240,6 @@ export async function startMeetingSession(teamMemberId: string) {
 export async function endMeetingSession(teamMemberId: string) {
   const supabase = createClientSupabase()
 
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get team member and verify team belongs to user
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', teamMemberId)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
-
   const { data, error } = await supabase
     .from('meeting_sessions')
     .update({ ended_at: new Date().toISOString() })
@@ -462,28 +255,6 @@ export async function endMeetingSession(teamMemberId: string) {
 
 export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): Promise<AgendaItem[]> {
   const supabase = createClientSupabase()
-
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
-
-  // Get team member and verify team belongs to user
-  const { data: member } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('id', teamMemberId)
-    .single()
-
-  if (!member) throw new Error('Team member not found')
-
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('id', member.team_id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (!team) throw new Error('Access denied')
 
   const { data: sessions, error: sessionError } = await supabase
     .from('meeting_sessions')
@@ -501,15 +272,20 @@ export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): 
     .from('meeting_session_agenda_items')
     .select('added_at, agenda_items(*)')
     .eq('meeting_session_id', sessionId)
-    .order('added_at', { ascending: false })
+    .order('added_at', { ascending: true })
 
   if (linksError) throw linksError
 
-  // Supabase can return nested selects as either an object or an array depending on relation metadata.
-  type MeetingSessionAgendaItemRow = { agenda_items: AgendaItem | AgendaItem[] | null }
-  const rows = (links || []) as unknown as MeetingSessionAgendaItemRow[]
+  // Supabase's inferred shape here can vary (agenda_items may come back as an object or a 1-element array),
+  // so normalize from unknown -> AgendaItem | null safely.
+  const rows = (links || []) as unknown as Array<{ agenda_items?: unknown }>
+
   return rows
-    .map((row) => (Array.isArray(row.agenda_items) ? row.agenda_items[0] ?? null : row.agenda_items))
+    .map((row) => {
+      const ai = row.agenda_items
+      if (!ai) return null
+      if (Array.isArray(ai)) return (ai[0] as AgendaItem | undefined) ?? null
+      return ai as AgendaItem
+    })
     .filter((x: AgendaItem | null): x is AgendaItem => Boolean(x))
 }
-
