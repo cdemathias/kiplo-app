@@ -276,9 +276,16 @@ export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): 
 
   if (linksError) throw linksError
 
-  const rows = (links || []) as Array<{ agenda_items: AgendaItem | null }>
+  // Supabase's inferred shape here can vary (agenda_items may come back as an object or a 1-element array),
+  // so normalize from unknown -> AgendaItem | null safely.
+  const rows = (links || []) as unknown as Array<{ agenda_items?: unknown }>
 
   return rows
-    .map((row) => row.agenda_items)
+    .map((row) => {
+      const ai = row.agenda_items
+      if (!ai) return null
+      if (Array.isArray(ai)) return (ai[0] as AgendaItem | undefined) ?? null
+      return ai as AgendaItem
+    })
     .filter((x: AgendaItem | null): x is AgendaItem => Boolean(x))
 }
