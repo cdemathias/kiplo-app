@@ -505,9 +505,11 @@ export async function getActiveMeetingSessionAgendaItems(teamMemberId: string): 
 
   if (linksError) throw linksError
 
-  const rows = (links || []) as Array<{ agenda_items: AgendaItem | null }>
+  // Supabase can return nested selects as either an object or an array depending on relation metadata.
+  type MeetingSessionAgendaItemRow = { agenda_items: AgendaItem | AgendaItem[] | null }
+  const rows = (links || []) as unknown as MeetingSessionAgendaItemRow[]
   return rows
-    .map((row) => row.agenda_items)
+    .map((row) => (Array.isArray(row.agenda_items) ? row.agenda_items[0] ?? null : row.agenda_items))
     .filter((x: AgendaItem | null): x is AgendaItem => Boolean(x))
 }
 
