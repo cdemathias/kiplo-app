@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { createBrowserSupabaseClient } from './supabase/browser'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
+import posthog from 'posthog-js'
 
 interface AuthContextType {
   user: User | null
@@ -38,6 +39,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session)
         setUser(session?.user ?? null)
         setLoading(false)
+
+        // Identify user with PostHog if already logged in
+        if (session?.user) {
+          posthog.identify(session.user.id, {
+            email: session.user.email,
+          })
+        }
       })
       .catch((error) => {
         if (!mounted) return
@@ -48,11 +56,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
+
+      // Identify user with PostHog
+      if (session?.user) {
+        posthog.identify(session.user.id, {
+          email: session.user.email,
+        })
+      } else if (event === 'SIGNED_OUT') {
+        posthog.reset()
+      }
     })
 
     return () => {
