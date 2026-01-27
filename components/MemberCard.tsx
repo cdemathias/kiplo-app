@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AgendaItem } from './AgendaItem'
 import type { TeamMember, AgendaItem as AgendaItemType } from '@/lib/db.types'
 import { cn } from '@/lib/utils'
-import { Play, Square } from 'lucide-react'
+import { Play, Square, Expand, Trash2 } from 'lucide-react'
 
 function getLocalISODateString(date: Date = new Date()): string {
   const y = date.getFullYear()
@@ -18,6 +19,7 @@ function getLocalISODateString(date: Date = new Date()): string {
 
 interface MemberCardProps {
   member: TeamMember & { agenda_items?: AgendaItemType[] }
+  teamId: string
   meetingAgendaItems?: AgendaItemType[]
   onDelete?: (id: string) => void
   onAddAgendaItem?: (memberId: string, content: string, scheduledDate?: string | null) => void
@@ -31,6 +33,7 @@ interface MemberCardProps {
 
 export function MemberCard({
   member,
+  teamId,
   meetingAgendaItems = [],
   onDelete,
   onAddAgendaItem,
@@ -86,8 +89,8 @@ export function MemberCard({
       )}
     >
       <CardHeader>
-        <CardTitle>{member.name}</CardTitle>
-        <CardAction className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2">
+          {member.name}
           {isMeetingActive ? (
             <Button
               variant="ghost"
@@ -115,18 +118,31 @@ export function MemberCard({
               <Play />
             </Button>
           )}
-
-          {onDelete && (
+          <Link href={`/teams/${teamId}/members/${member.id}`}>
             <Button
               variant="ghost"
-              size="sm"
-              onClick={() => onDelete(member.id)}
-              className="text-destructive hover:text-destructive"
+              size="icon-sm"
+              aria-label="Expand"
+              title="Expand"
             >
-              Delete
+              <Expand />
             </Button>
-          )}
-        </CardAction>
+          </Link>
+        </CardTitle>
+        {onDelete && (
+          <CardAction>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onDelete(member.id)}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              aria-label="Delete member"
+              title="Delete member"
+            >
+              <Trash2 />
+            </Button>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <div>

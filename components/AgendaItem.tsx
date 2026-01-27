@@ -17,6 +17,8 @@ interface AgendaItemProps {
 export function AgendaItem({ item, onToggle, onDelete, onUpdate }: AgendaItemProps) {
   const [isEditingDate, setIsEditingDate] = useState(false)
   const [dateValue, setDateValue] = useState(item.scheduled_date || '')
+  const [isEditingContent, setIsEditingContent] = useState(false)
+  const [contentValue, setContentValue] = useState(item.content)
 
   const handleToggle = () => {
     if (onToggle) {
@@ -41,6 +43,26 @@ export function AgendaItem({ item, onToggle, onDelete, onUpdate }: AgendaItemPro
     } catch (error) {
       console.error('Error updating date:', error)
       setDateValue(item.scheduled_date || '')
+    }
+  }
+
+  const handleContentChange = async (newContent: string) => {
+    const trimmedContent = newContent.trim()
+    if (!trimmedContent || trimmedContent === item.content) {
+      setIsEditingContent(false)
+      setContentValue(item.content)
+      return
+    }
+    try {
+      const updatedItem = await updateAgendaItem(item.id, { content: trimmedContent })
+      if (onUpdate) {
+        onUpdate(updatedItem)
+      }
+      setIsEditingContent(false)
+      setContentValue(trimmedContent)
+    } catch (error) {
+      console.error('Error updating content:', error)
+      setContentValue(item.content)
     }
   }
 
@@ -79,15 +101,34 @@ export function AgendaItem({ item, onToggle, onDelete, onUpdate }: AgendaItemPro
         className="mt-0.5"
       />
       <div className="flex-1 min-w-0">
-        <p
-          className={`text-sm ${
-            item.completed
-              ? 'line-through text-muted-foreground'
-              : 'text-foreground'
-          }`}
-        >
-          {item.content}
-        </p>
+        {isEditingContent ? (
+          <Input
+            value={contentValue}
+            onChange={(e) => setContentValue(e.target.value)}
+            onBlur={() => handleContentChange(contentValue)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleContentChange(contentValue)
+              } else if (e.key === 'Escape') {
+                setIsEditingContent(false)
+                setContentValue(item.content)
+              }
+            }}
+            className="h-7 text-sm"
+            autoFocus
+          />
+        ) : (
+          <p
+            onClick={() => setIsEditingContent(true)}
+            className={`text-sm cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 ${
+              item.completed
+                ? 'line-through text-muted-foreground'
+                : 'text-foreground'
+            }`}
+          >
+            {item.content}
+          </p>
+        )}
         {isEditingDate ? (
           <div className="flex items-center gap-2 mt-1">
             <Input
