@@ -86,8 +86,8 @@ export function MemberCard({
       )}
     >
       <CardHeader>
-        <CardTitle>{member.name}</CardTitle>
-        <CardAction className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2">
+          {member.name}
           {isMeetingActive ? (
             <Button
               variant="ghost"
@@ -115,8 +115,9 @@ export function MemberCard({
               <Play />
             </Button>
           )}
-
-          {onDelete && (
+        </CardTitle>
+        {onDelete && (
+          <CardAction>
             <Button
               variant="ghost"
               size="sm"
@@ -125,8 +126,8 @@ export function MemberCard({
             >
               Delete
             </Button>
-          )}
-        </CardAction>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
