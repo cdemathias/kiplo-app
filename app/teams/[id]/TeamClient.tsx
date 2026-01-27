@@ -293,6 +293,7 @@ export default function TeamClient({
               <MemberCard
                 key={member.id}
                 member={member}
+                teamId={teamId}
                 meetingAgendaItems={meetingAgendaItemsByMemberId[member.id] || []}
                 onDelete={handleDeleteMember}
                 onAddAgendaItem={handleAddAgendaItem}
