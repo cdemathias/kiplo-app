@@ -106,6 +106,30 @@ export async function deleteTeamMember(id: string) {
   if (error) throw error
 }
 
+export async function updateMemberProfile(
+  id: string,
+  profile: {
+    role?: string | null
+    current_focus?: string | null
+    growth_goals?: string | null
+    one_on_one_themes?: string | null
+    feedback_preferences?: string | null
+    profile_raw_input?: string | null
+  }
+) {
+  const supabase = createClientSupabase()
+
+  const { data, error } = await supabase
+    .from('team_members')
+    .update(profile)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as TeamMember
+}
+
 // Agenda items operations
 export async function getAgendaItems(teamMemberId: string) {
   const supabase = createClientSupabase()

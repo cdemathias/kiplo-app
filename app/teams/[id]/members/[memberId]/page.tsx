@@ -17,10 +17,13 @@ function normalizeAgendaItem(value: unknown): AgendaItem | null {
 
 export default async function MemberDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string; memberId: string }
+  searchParams: { tab?: string }
 }) {
   const { id: teamId, memberId } = await (params as unknown as Promise<{ id: string; memberId: string }>)
+  const { tab } = await (searchParams as unknown as Promise<{ tab?: string }>)
   const supabase = await createServerSupabaseClient()
 
   const {
@@ -54,6 +57,12 @@ export default async function MemberDetailPage({
     team_id: string
     name: string
     created_at: string
+    role?: string | null
+    current_focus?: string | null
+    growth_goals?: string | null
+    one_on_one_themes?: string | null
+    feedback_preferences?: string | null
+    profile_raw_input?: string | null
     agenda_items?: AgendaItem[]
     meeting_sessions?: MeetingSessionRow[]
   }
@@ -63,6 +72,12 @@ export default async function MemberDetailPage({
     team_id: rawMember.team_id,
     name: rawMember.name,
     created_at: rawMember.created_at,
+    role: rawMember.role || null,
+    current_focus: rawMember.current_focus || null,
+    growth_goals: rawMember.growth_goals || null,
+    one_on_one_themes: rawMember.one_on_one_themes || null,
+    feedback_preferences: rawMember.feedback_preferences || null,
+    profile_raw_input: rawMember.profile_raw_input || null,
     agenda_items: rawMember.agenda_items || [],
     meeting_sessions: (rawMember.meeting_sessions || []) as MeetingSession[],
   }
@@ -86,6 +101,7 @@ export default async function MemberDetailPage({
       teamName={team.name}
       initialMember={initialMember}
       initialMeetingAgendaItems={initialMeetingAgendaItems}
+      initialTab={tab === 'profile' ? 'profile' : 'agenda'}
     />
   )
 }

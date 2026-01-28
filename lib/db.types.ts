@@ -13,6 +13,21 @@ export type TeamMember = {
   team_id: string
   name: string
   created_at: string
+  // Profile fields
+  role: string | null
+  current_focus: string | null
+  growth_goals: string | null
+  one_on_one_themes: string | null
+  feedback_preferences: string | null
+  profile_raw_input: string | null
+}
+
+export type MemberProfile = {
+  role: string | null
+  current_focus: string | null
+  growth_goals: string | null
+  one_on_one_themes: string | null
+  feedback_preferences: string | null
 }
 
 export type AgendaItem = {

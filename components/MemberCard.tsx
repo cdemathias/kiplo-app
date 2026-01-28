@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { AgendaItem } from './AgendaItem'
 import type { TeamMember, AgendaItem as AgendaItemType } from '@/lib/db.types'
 import { cn } from '@/lib/utils'
-import { Play, Square, Expand, Trash2 } from 'lucide-react'
+import { Play, Square, Expand, Trash2, CircleUser } from 'lucide-react'
 
 function getLocalISODateString(date: Date = new Date()): string {
   const y = date.getFullYear()
@@ -129,8 +129,18 @@ export function MemberCard({
             </Button>
           </Link>
         </CardTitle>
-        {onDelete && (
-          <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <Link href={`/teams/${teamId}/members/${member.id}?tab=profile`}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Edit profile"
+              title="Edit profile"
+            >
+              <CircleUser />
+            </Button>
+          </Link>
+          {onDelete && (
             <Button
               variant="ghost"
               size="icon-sm"
@@ -141,8 +151,8 @@ export function MemberCard({
             >
               <Trash2 />
             </Button>
-          </CardAction>
-        )}
+          )}
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
